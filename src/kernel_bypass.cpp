@@ -19,6 +19,10 @@
 #include <array>
 #include <optional>
 
+#ifndef BPF_ALU64_REG
+#define BPF_ALU64_REG(OP, DST, SRC) \
+    ((struct bpf_insn){.code = BPF_ALU64 | BPF_OP(OP) | BPF_X, .dst_reg = (DST), .src_reg = (SRC), .off = 0, .imm = 0})
+#endif
 #ifndef BPF_MOV64_REG
 #define BPF_MOV64_REG(DST, SRC) BPF_ALU64_REG(BPF_MOV, DST, SRC)
 #endif

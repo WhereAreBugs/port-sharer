@@ -3,9 +3,14 @@
 #include "detector.hpp"
 #include "proxy_protocol.hpp"
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/connect.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/write.hpp>
+#include <boost/asio/posix/stream_descriptor.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/detail/socket_option.hpp>
 
 #include <array>
@@ -427,60 +432,89 @@ bool Session::start_zero_copy_splice() {
     int bfd = backend_socket_.native_handle();
     if (cfd < 0 || bfd < 0) return false;
 
-    int pipe_c2b[2];
-    int pipe_b2c[2];
-    if (pipe2(pipe_c2b, O_NONBLOCK | O_CLOEXEC) != 0) return false;
-    if (pipe2(pipe_b2c, O_NONBLOCK | O_CLOEXEC) != 0) {
-        close(pipe_c2b[0]); close(pipe_c2b[1]);
+    auto pipe_c2b = std::make_shared<std::array<int, 2>>();
+    auto pipe_b2c = std::make_shared<std::array<int, 2>>();
+    if (pipe2(pipe_c2b->data(), O_NONBLOCK | O_CLOEXEC) != 0) return false;
+    if (pipe2(pipe_b2c->data(), O_NONBLOCK | O_CLOEXEC) != 0) {
+        close((*pipe_c2b)[0]); close((*pipe_c2b)[1]);
         return false;
     }
 
     auto self = shared_from_this();
-    auto pump = [self](int from_fd, int to_fd, int pipes[2], const char* tag) {
+    using boost::asio::awaitable;
+    using boost::asio::co_spawn;
+    using boost::asio::detached;
+    using boost::asio::posix::stream_descriptor;
+    using boost::asio::use_awaitable;
+
+    // Duplicate fds so coroutine descriptors can close without touching sockets.
+    auto cwait = std::make_shared<stream_descriptor>(client_socket_.get_executor());
+    auto bwait = std::make_shared<stream_descriptor>(client_socket_.get_executor());
+    auto cdup = ::dup(cfd);
+    auto bdup = ::dup(bfd);
+    if (cdup < 0 || bdup < 0) {
+        if (cdup >= 0) ::close(cdup);
+        if (bdup >= 0) ::close(bdup);
+        return false;
+    }
+    cwait->assign(cdup);
+    bwait->assign(bdup);
+
+    auto pump = [self](int from_fd, int to_fd,
+                       std::shared_ptr<std::array<int, 2>> pipes,
+                       std::shared_ptr<stream_descriptor> wait_in,
+                       std::shared_ptr<stream_descriptor> wait_out,
+                       const char* tag) -> awaitable<void> {
         constexpr std::size_t kChunk = 64 * 1024;
-        while (!self->closed_.load()) {
-            ssize_t n = ::splice(from_fd, nullptr, pipes[1], nullptr, kChunk, SPLICE_F_MOVE | SPLICE_F_MORE | SPLICE_F_NONBLOCK);
+        for (;;) {
+            ssize_t n = ::splice(from_fd, nullptr, (*pipes)[1], nullptr, kChunk,
+                                 SPLICE_F_MOVE | SPLICE_F_MORE | SPLICE_F_NONBLOCK);
             if (n == 0) break; // EOF
             if (n < 0) {
                 if (errno == EINTR) continue;
                 if (errno == EAGAIN) {
-                    struct pollfd pfd{from_fd, POLLIN, 0};
-                    ::poll(&pfd, 1, 250);
+                    co_await wait_in->async_wait(stream_descriptor::wait_read, use_awaitable);
+                    if (self->closed_.load()) break;
                     continue;
                 }
                 std::cerr << "[session] splice read error (" << tag << "): " << strerror(errno) << "\n";
                 break;
             }
+
             std::size_t transferred = 0;
-            while (transferred < static_cast<std::size_t>(n) && !self->closed_.load()) {
-                ssize_t w = ::splice(pipes[0], nullptr, to_fd, nullptr, static_cast<size_t>(n) - transferred,
+            while (transferred < static_cast<std::size_t>(n)) {
+                ssize_t w = ::splice((*pipes)[0], nullptr, to_fd, nullptr,
+                                     static_cast<size_t>(n) - transferred,
                                      SPLICE_F_MOVE | SPLICE_F_MORE | SPLICE_F_NONBLOCK);
                 if (w == 0) break;
                 if (w < 0) {
                     if (errno == EINTR) continue;
                     if (errno == EAGAIN) {
-                        struct pollfd pfd{to_fd, POLLOUT, 0};
-                        ::poll(&pfd, 1, 250);
+                        co_await wait_out->async_wait(stream_descriptor::wait_write, use_awaitable);
+                        if (self->closed_.load()) break;
                         continue;
                     }
                     std::cerr << "[session] splice write error (" << tag << "): " << strerror(errno) << "\n";
                     self->close_sockets(boost::system::error_code{});
-                    close(pipes[0]);
-                    close(pipes[1]);
-                    return;
+                    goto done;
                 }
                 transferred += static_cast<std::size_t>(w);
+                if (self->closed_.load()) goto done;
             }
         }
-        close(pipes[0]);
-        close(pipes[1]);
+    done:
+        close((*pipes)[0]);
+        close((*pipes)[1]);
         self->close_sockets(boost::system::error_code{});
+        co_return;
     };
 
-    std::thread t1(pump, cfd, bfd, pipe_c2b, "c->b");
-    std::thread t2(pump, bfd, cfd, pipe_b2c, "b->c");
-    t1.detach();
-    t2.detach();
+    co_spawn(client_socket_.get_executor(),
+             pump(cfd, bfd, pipe_c2b, cwait, bwait, "c->b"),
+             detached);
+    co_spawn(client_socket_.get_executor(),
+             pump(bfd, cfd, pipe_b2c, bwait, cwait, "b->c"),
+             detached);
     std::cout << "[session] zero-copy splice engaged for " << remote_label_ << "\n";
     return true;
 #else
@@ -519,7 +553,7 @@ bool Session::start_zero_copy_io_uring() {
     }
 
     auto self = shared_from_this();
-    std::thread([self, ring]() mutable {
+    std::thread([self, ring, submit_splice]() mutable {
         int active = 2;
         while (active > 0 && !self->closed_.load()) {
             io_uring_cqe* cqe = nullptr;

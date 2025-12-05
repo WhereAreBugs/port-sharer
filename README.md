@@ -24,6 +24,7 @@
 - [x] Prometheus 指标收集
 - [x] HTTP 源 IP 透传头注入
 - [x] 零拷贝/内核旁路转发（Linux：splice/io_uring + eBPF sockmap）
+- [x] 使用协程替换线程进行处理
 
 #### 编译教程
 在你的openwrt仓库根，运行以下代码:
