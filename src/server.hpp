@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config.hpp"
+#include "access_control.hpp"
 #include "metrics.hpp"
 #include "router.hpp"
 
@@ -25,6 +26,7 @@ private:
     AppConfig config_;
     std::shared_ptr<Router> router_;
     MetricsPtr metrics_;
+    AccessController access_;
 };
 
 } // namespace port_sharer

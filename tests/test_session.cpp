@@ -51,6 +51,7 @@ std::vector<char> run_session_case(const SessionCase& c) {
         c.name,
         c.detector,
         c.detector == DetectorKind::Prefix ? std::string("HELLO") : std::string{},
+        {},
         Backend{"127.0.0.1", backend_port, c.proxy_protocol},
         HttpForward{c.enable_http_forward, true, true, true, true, true, {HeaderKV{"X-Test", "1"}}}
     };
@@ -190,6 +191,7 @@ int main() {
         RouteRule rule{
             "always",
             DetectorKind::Always,
+            {},
             {},
             Backend{"127.0.0.1", backend_acceptor.local_endpoint().port(), false},
             HttpForward{}

@@ -29,6 +29,7 @@ enum class DetectorKind {
     HttpOrTls,
     Prefix,
     SshBanner,
+    SshUsername,
     Always
 };
 
@@ -46,8 +47,20 @@ struct RouteRule {
     std::string name;
     DetectorKind detector = DetectorKind::HttpOrTls;
     std::string prefix; // only used by Prefix detector
+    std::vector<std::string> ssh_usernames; // only used by SshUsername detector
     Backend backend;
     HttpForward http_forward;
+};
+
+struct AccessControl {
+    std::vector<std::string> whitelist;
+    std::vector<std::string> blacklist;
+    struct SynLimit {
+        bool enable = false;
+        std::uint32_t max_attempts = 0;
+        std::uint32_t interval_ms = 1000;
+        std::uint32_t ban_seconds = 60;
+    } syn_limit;
 };
 
 struct AppConfig {
@@ -55,6 +68,7 @@ struct AppConfig {
     std::vector<RouteRule> routes;
     Backend fallback;
     std::size_t peek_size = 512;
+    AccessControl access;
     struct Performance {
 #ifdef __linux__
         bool prefer_zero_copy = true;

@@ -19,6 +19,42 @@
 #include <array>
 #include <optional>
 
+#ifndef BPF_MOV64_REG
+#define BPF_MOV64_REG(DST, SRC) BPF_ALU64_REG(BPF_MOV, DST, SRC)
+#endif
+#ifndef BPF_MOV64_IMM
+#define BPF_MOV64_IMM(DST, IMM) BPF_ALU64_IMM(BPF_MOV, DST, IMM)
+#endif
+#ifndef BPF_ALU64_IMM
+#define BPF_ALU64_IMM(OP, DST, IMM) \
+    ((struct bpf_insn){.code = BPF_ALU64 | BPF_OP(OP) | BPF_K, .dst_reg = (DST), .src_reg = 0, .off = 0, .imm = (IMM)})
+#endif
+#ifndef BPF_STX_MEM
+#define BPF_STX_MEM(SIZE, DST, SRC, OFF) \
+    ((struct bpf_insn){.code = BPF_STX | BPF_SIZE(SIZE) | BPF_MEM, .dst_reg = (DST), .src_reg = (SRC), .off = (OFF), .imm = 0})
+#endif
+#ifndef BPF_LD_MAP_FD
+#define BPF_LD_MAP_FD(DST, MAP) \
+    ((struct bpf_insn){.code = BPF_LD | BPF_DW | BPF_IMM, .dst_reg = (DST), .src_reg = BPF_PSEUDO_MAP_FD, .off = 0, .imm = (MAP)})
+#endif
+#ifndef BPF_JMP_IMM
+#define BPF_JMP_IMM(OP, DST, IMM, OFF) \
+    ((struct bpf_insn){.code = BPF_JMP | BPF_OP(OP) | BPF_K, .dst_reg = (DST), .src_reg = 0, .off = (OFF), .imm = (IMM)})
+#endif
+#ifndef BPF_EXIT_INSN
+#define BPF_EXIT_INSN() ((struct bpf_insn){.code = BPF_JMP | BPF_EXIT, .dst_reg = 0, .src_reg = 0, .off = 0, .imm = 0})
+#endif
+#ifndef BPF_EMIT_CALL
+#define BPF_EMIT_CALL(FUNC) \
+    ((struct bpf_insn){.code = BPF_JMP | BPF_CALL, .dst_reg = 0, .src_reg = 0, .off = 0, .imm = (FUNC)})
+#endif
+#ifndef BPF_F_INGRESS
+#define BPF_F_INGRESS (1U << 4)
+#endif
+#ifndef SK_PASS
+#define SK_PASS 1
+#endif
+
 namespace port_sharer {
 
 namespace {

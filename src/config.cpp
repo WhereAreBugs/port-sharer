@@ -23,6 +23,7 @@ DetectorKind parse_detector(std::string_view value) {
     if (value == "http_or_tls" || value == "https") return DetectorKind::HttpOrTls;
     if (value == "prefix") return DetectorKind::Prefix;
     if (value == "ssh" || value == "ssh_banner") return DetectorKind::SshBanner;
+    if (value == "ssh_user" || value == "ssh_username") return DetectorKind::SshUsername;
     if (value == "always") return DetectorKind::Always;
     return DetectorKind::HttpOrTls;
 }
@@ -55,6 +56,16 @@ HttpForward parse_http_forward(const pt::ptree& node, const HttpForward& fallbac
     return hf;
 }
 
+std::vector<std::string> parse_string_list(const pt::ptree& node, const std::string& key) {
+    std::vector<std::string> out;
+    if (auto child = node.get_child_optional(key)) {
+        for (const auto& item : *child) {
+            out.push_back(item.second.get_value<std::string>());
+        }
+    }
+    return out;
+}
+
 } // namespace
 
 AppConfig make_default_config() {
@@ -66,12 +77,14 @@ AppConfig make_default_config() {
             "http-https",
             DetectorKind::HttpOrTls,
             {},
+            {},
             Backend{"127.0.0.1", 443, false},
             HttpForward{true, true, true, true, true, false, {}}
         },
         RouteRule{
             "ssh",
             DetectorKind::SshBanner,
+            {},
             {},
             Backend{"127.0.0.1", 22, false},
             HttpForward{}
@@ -125,6 +138,14 @@ std::vector<InstanceConfig> load_configs_from_uci(std::ostream& log) {
         }
         return list;
     };
+    auto parse_list = [](uci_option* opt) {
+        std::vector<std::string> list;
+        if (!opt || opt->type != UCI_TYPE_LIST) return list;
+        for (uci_element* e = opt->v.list.head; e; e = e->next) {
+            if (e->name) list.emplace_back(e->name);
+        }
+        return list;
+    };
 
     // First pass: load instances
     for (uci_element* e = pkg->sections.head; e; e = e->next) {
@@ -142,6 +163,13 @@ std::vector<InstanceConfig> load_configs_from_uci(std::ostream& log) {
         inst.app.performance.prefer_kernel_dnat = read_bool(uci_lookup_option(ctx, sec, "prefer_kernel_dnat"), inst.app.performance.prefer_kernel_dnat);
         inst.app.metrics.enable = read_bool(uci_lookup_option(ctx, sec, "metrics_enable"), inst.app.metrics.enable);
         inst.app.metrics.port = static_cast<uint16_t>(std::stoi(read_str(uci_lookup_option(ctx, sec, "metrics_port"), std::to_string(inst.app.metrics.port))));
+        inst.app.access.whitelist = parse_list(uci_lookup_option(ctx, sec, "whitelist"));
+        inst.app.access.blacklist = parse_list(uci_lookup_option(ctx, sec, "blacklist"));
+        inst.app.access.syn_limit.enable = read_bool(uci_lookup_option(ctx, sec, "syn_limit_enable"), inst.app.access.syn_limit.enable);
+        inst.app.access.syn_limit.max_attempts = static_cast<std::uint32_t>(std::stoul(read_str(uci_lookup_option(ctx, sec, "syn_limit_max"), std::to_string(inst.app.access.syn_limit.max_attempts))));
+        inst.app.access.syn_limit.interval_ms = static_cast<std::uint32_t>(std::stoul(read_str(uci_lookup_option(ctx, sec, "syn_limit_interval_ms"), std::to_string(inst.app.access.syn_limit.interval_ms))));
+        inst.app.access.syn_limit.ban_seconds = static_cast<std::uint32_t>(std::stoul(read_str(uci_lookup_option(ctx, sec, "syn_limit_ban_seconds"), std::to_string(inst.app.access.syn_limit.ban_seconds))));
+        if (inst.app.access.syn_limit.interval_ms == 0) inst.app.access.syn_limit.interval_ms = 1000;
         instances.push_back(std::move(inst));
     }
 
@@ -186,6 +214,12 @@ std::vector<InstanceConfig> load_configs_from_uci(std::ostream& log) {
             rule.http_forward.add_x_forwarded_port = read_bool(uci_lookup_option(ctx, sec, "x_forwarded_port"), rule.http_forward.add_x_forwarded_port);
             rule.http_forward.add_forwarded = read_bool(uci_lookup_option(ctx, sec, "forwarded"), rule.http_forward.add_forwarded);
             rule.http_forward.extra_headers = parse_headers(uci_lookup_option(ctx, sec, "headers"));
+            rule.ssh_usernames = parse_list(uci_lookup_option(ctx, sec, "ssh_usernames"));
+            auto ssh_user = read_str(uci_lookup_option(ctx, sec, "ssh_username"), "");
+            if (rule.ssh_usernames.empty() && !ssh_user.empty()) {
+                rule.ssh_usernames.push_back(ssh_user);
+            }
+            if (rule.detector == DetectorKind::SshUsername && rule.ssh_usernames.empty()) continue;
             if (rule.backend.port == 0) continue;
             inst->app.routes.push_back(rule);
         } else if (stype == "server") {
@@ -264,6 +298,17 @@ AppConfig load_config(const std::string& config_path, std::ostream& log) {
     config.metrics.port = tree.get<uint16_t>("metrics.port", config.metrics.port);
     config.performance.prefer_zero_copy = tree.get<bool>("performance.prefer_zero_copy", config.performance.prefer_zero_copy);
     config.performance.prefer_kernel_dnat = tree.get<bool>("performance.prefer_kernel_dnat", config.performance.prefer_kernel_dnat);
+    if (auto access_node = tree.get_child_optional("access")) {
+        config.access.whitelist = parse_string_list(*access_node, "whitelist");
+        config.access.blacklist = parse_string_list(*access_node, "blacklist");
+        if (auto syn_node = access_node->get_child_optional("syn_limit")) {
+            config.access.syn_limit.enable = syn_node->get<bool>("enable", config.access.syn_limit.enable);
+            config.access.syn_limit.max_attempts = syn_node->get<std::uint32_t>("max_attempts", config.access.syn_limit.max_attempts);
+            config.access.syn_limit.interval_ms = syn_node->get<std::uint32_t>("interval_ms", config.access.syn_limit.interval_ms);
+            config.access.syn_limit.ban_seconds = syn_node->get<std::uint32_t>("ban_seconds", config.access.syn_limit.ban_seconds);
+        }
+        if (config.access.syn_limit.interval_ms == 0) config.access.syn_limit.interval_ms = 1000;
+    }
 
     if (auto fallback_node = tree.get_child_optional("fallback")) {
         config.fallback = parse_backend(*fallback_node, config.fallback);
@@ -278,11 +323,21 @@ AppConfig load_config(const std::string& config_path, std::ostream& log) {
             rule.name = node.get<std::string>("name", "rule-" + std::to_string(++unnamed_index));
             rule.detector = parse_detector(node.get<std::string>("detector", "http_or_tls"));
             rule.prefix = node.get<std::string>("prefix", "");
+            rule.ssh_usernames = parse_string_list(node, "ssh_usernames");
+            if (rule.ssh_usernames.empty()) {
+                if (auto single = node.get_optional<std::string>("ssh_username")) {
+                    rule.ssh_usernames.push_back(*single);
+                }
+            }
             if (auto backend_node = node.get_child_optional("backend")) {
                 rule.backend = parse_backend(*backend_node, config.fallback);
             }
             if (auto httpf_node = node.get_child_optional("http_forward")) {
                 rule.http_forward = parse_http_forward(*httpf_node, rule.http_forward);
+            }
+            if (rule.detector == DetectorKind::SshUsername && rule.ssh_usernames.empty()) {
+                log << "[config] Skip rule '" << rule.name << "' due to empty ssh_usernames.\n";
+                continue;
             }
             if (rule.backend.port == 0) {
                 log << "[config] Skip rule '" << rule.name << "' due to invalid port.\n";

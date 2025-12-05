@@ -110,6 +110,7 @@ Summary run_concurrent_payload(std::size_t threads) {
         "mock-heavy-concurrent",
         DetectorKind::Prefix,
         "MOCK",
+        {},
         Backend{"127.0.0.1", backend_port, false},
         HttpForward{}
     };

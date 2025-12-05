@@ -36,6 +36,7 @@ int main() {
             "peek_size": 32,
             "metrics": {"enable": true, "port": 10001},
             "performance": {"prefer_zero_copy": false, "prefer_kernel_dnat": false},
+            "access": {"whitelist": ["192.0.2.0/24"], "blacklist": ["203.0.113.1"], "syn_limit": {"enable": true, "max_attempts": 5, "interval_ms": 1200, "ban_seconds": 30}},
             "fallback": {"host": "10.0.0.1", "port": 8080, "proxy_protocol": true},
             "routes": [
                 {"name": "skip-me", "backend": {"host": "1.2.3.4", "port": 0}},
@@ -57,6 +58,12 @@ int main() {
         EXPECT_EQ(cfg.metrics.port, 10001);
         EXPECT_FALSE(cfg.performance.prefer_zero_copy);
         EXPECT_FALSE(cfg.performance.prefer_kernel_dnat);
+        EXPECT_EQ(cfg.access.whitelist.size(), 1u);
+        EXPECT_EQ(cfg.access.blacklist.size(), 1u);
+        EXPECT_TRUE(cfg.access.syn_limit.enable);
+        EXPECT_EQ(cfg.access.syn_limit.max_attempts, 5u);
+        EXPECT_EQ(cfg.access.syn_limit.interval_ms, 1200u);
+        EXPECT_EQ(cfg.access.syn_limit.ban_seconds, 30u);
         EXPECT_EQ(cfg.fallback.host, "10.0.0.1");
         EXPECT_EQ(cfg.fallback.port, 8080);
         EXPECT_TRUE(cfg.fallback.proxy_protocol);

@@ -121,11 +121,11 @@ inline void stress_run(const StressConfig& cfg) {
     };
 
     std::vector<RouteRule> rules = {
-        {"http", DetectorKind::Http, "", Backend{"127.0.0.1", find_backend("http").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{true, true, true, true, true, true, {}}},
-        {"tls", DetectorKind::TlsClientHello, "", Backend{"127.0.0.1", find_backend("tls").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{}},
-        {"http_or_tls", DetectorKind::HttpOrTls, "", Backend{"127.0.0.1", find_backend("http_or_tls").acceptor.local_endpoint().port(), select_proxy(false)}, HttpForward{}},
-        {"prefix", DetectorKind::Prefix, "HELLO", Backend{"127.0.0.1", find_backend("prefix").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{}},
-        {"ssh", DetectorKind::SshBanner, "", Backend{"127.0.0.1", find_backend("ssh").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{}},
+        {"http", DetectorKind::Http, "", {}, Backend{"127.0.0.1", find_backend("http").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{true, true, true, true, true, true, {}}},
+        {"tls", DetectorKind::TlsClientHello, "", {}, Backend{"127.0.0.1", find_backend("tls").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{}},
+        {"http_or_tls", DetectorKind::HttpOrTls, "", {}, Backend{"127.0.0.1", find_backend("http_or_tls").acceptor.local_endpoint().port(), select_proxy(false)}, HttpForward{}},
+        {"prefix", DetectorKind::Prefix, "HELLO", {}, Backend{"127.0.0.1", find_backend("prefix").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{}},
+        {"ssh", DetectorKind::SshBanner, "", {}, Backend{"127.0.0.1", find_backend("ssh").acceptor.local_endpoint().port(), select_proxy(true)}, HttpForward{}},
     };
     find_backend("http").expect_proxy_header = rules[0].backend.proxy_protocol;
     find_backend("tls").expect_proxy_header = rules[1].backend.proxy_protocol;
@@ -344,11 +344,11 @@ inline void stress_run_extreme() {
     };
 
     std::vector<RouteRule> rules = {
-        {"http", DetectorKind::Http, "", Backend{"127.0.0.1", find_backend("http").acceptor.local_endpoint().port(), true}, HttpForward{true, true, true, true, true, true, {}}},
-        {"tls", DetectorKind::TlsClientHello, "", Backend{"127.0.0.1", find_backend("tls").acceptor.local_endpoint().port(), true}, HttpForward{}},
-        {"http_or_tls", DetectorKind::HttpOrTls, "", Backend{"127.0.0.1", find_backend("http_or_tls").acceptor.local_endpoint().port(), false}, HttpForward{}},
-        {"prefix", DetectorKind::Prefix, "HELLO", Backend{"127.0.0.1", find_backend("prefix").acceptor.local_endpoint().port(), true}, HttpForward{}},
-        {"ssh", DetectorKind::SshBanner, "", Backend{"127.0.0.1", find_backend("ssh").acceptor.local_endpoint().port(), true}, HttpForward{}},
+        {"http", DetectorKind::Http, "", {}, Backend{"127.0.0.1", find_backend("http").acceptor.local_endpoint().port(), true}, HttpForward{true, true, true, true, true, true, {}}},
+        {"tls", DetectorKind::TlsClientHello, "", {}, Backend{"127.0.0.1", find_backend("tls").acceptor.local_endpoint().port(), true}, HttpForward{}},
+        {"http_or_tls", DetectorKind::HttpOrTls, "", {}, Backend{"127.0.0.1", find_backend("http_or_tls").acceptor.local_endpoint().port(), false}, HttpForward{}},
+        {"prefix", DetectorKind::Prefix, "HELLO", {}, Backend{"127.0.0.1", find_backend("prefix").acceptor.local_endpoint().port(), true}, HttpForward{}},
+        {"ssh", DetectorKind::SshBanner, "", {}, Backend{"127.0.0.1", find_backend("ssh").acceptor.local_endpoint().port(), true}, HttpForward{}},
     };
     find_backend("http").expect_proxy_header = true;
     find_backend("tls").expect_proxy_header = true;

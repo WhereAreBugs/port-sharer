@@ -2,6 +2,11 @@
   "listen": { "address": "0.0.0.0", "port": 8888 },
   "peek_size": 512,
   "metrics": { "enable": true, "port": 9100 },
+  "access": {
+    "whitelist": [ "0.0.0.0/0" ],
+    "blacklist": [ "203.0.113.1" ],
+    "syn_limit": { "enable": true, "max_attempts": 120, "interval_ms": 1000, "ban_seconds": 30 }
+  },
   "routes": [
     {
       "name": "web",
@@ -18,6 +23,12 @@
         ]
       },
       "backend": { "host": "127.0.0.1", "port": 443, "proxy_protocol": false }
+    },
+    {
+      "name": "ssh-admin",
+      "detector": "ssh_username",
+      "ssh_usernames": ["admin", "root"],
+      "backend": { "host": "127.0.0.1", "port": 2222, "proxy_protocol": true }
     },
     {
       "name": "ssh",
