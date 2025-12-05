@@ -1,0 +1,29 @@
+{
+  "listen": { "address": "0.0.0.0", "port": 8888 },
+  "peek_size": 512,
+  "metrics": { "enable": true, "port": 9100 },
+  "routes": [
+    {
+      "name": "web",
+      "detector": "http_or_tls",
+      "http_forward": {
+        "enable": true,
+        "x_real_ip": true,
+        "x_forwarded_for": true,
+        "x_forwarded_proto": true,
+        "x_forwarded_port": true,
+        "forwarded": false,
+        "headers": [
+          { "name": "X-Forwarded-Host", "value": "example.org" }
+        ]
+      },
+      "backend": { "host": "127.0.0.1", "port": 443, "proxy_protocol": false }
+    },
+    {
+      "name": "ssh",
+      "detector": "ssh",
+      "backend": { "host": "127.0.0.1", "port": 22, "proxy_protocol": true }
+    }
+  ],
+  "fallback": { "host": "127.0.0.1", "port": 22, "proxy_protocol": false }
+}

@@ -24,8 +24,8 @@ start_service() {
     procd_set_param stderr 0
 
     procd_set_param nice 10
-    # TODO Use config file below，support uci
-    procd_set_param file /etc/config/httpPortReuse
+    # Reload when UCI config changes
+    procd_set_param file /etc/config/httpportreuse
 
     procd_close_instance
 }

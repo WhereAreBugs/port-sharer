@@ -1,0 +1,13 @@
+{
+	"admin/services/port_sharer": {
+		"title": "Port Sharer",
+		"order": 10,
+		"action": {
+			"type": "cbi",
+			"path": "port_sharer/instances"
+		},
+		"depends": {
+			"acl": [ "luci-app-port-sharer" ]
+		}
+	}
+}

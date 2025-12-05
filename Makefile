@@ -40,16 +40,16 @@ define Package/port-sharer/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/port-sharer $(1)/usr/bin/
 	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/port-sharer.init $(1)/etc/init.d/port-sharer
+	$(INSTALL_BIN) ./files/httpPortReuse.init $(1)/etc/init.d/httpportreuse
 	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_CONF) ./files/port-sharer.conf $(1)/etc/config/port_sharer
+	$(INSTALL_CONF) ./files/httpportreuse.config $(1)/etc/config/httpportreuse
 endef
 
 # 定义安装后执行的脚本
 define Package/port-sharer/postinst
 #!/bin/sh
 if [ -d /etc/rc.d ]; then
-    /etc/init.d/port-sharer enable
+    /etc/init.d/httpportreuse enable
 fi
 exit 0
 endef

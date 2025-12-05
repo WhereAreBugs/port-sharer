@@ -1,0 +1,11 @@
+{
+	"luci-app-port-sharer": {
+		"description": "Grant UCI access for Port Sharer",
+		"read": {
+			"uci": [ "httpportreuse" ]
+		},
+		"write": {
+			"uci": [ "httpportreuse" ]
+		}
+	}
+}
